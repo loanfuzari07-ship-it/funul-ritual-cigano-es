@@ -3750,15 +3750,21 @@ src="https://www.facebook.com/tr?id=2132753127287666&ev=PageView&noscript=1"
       });
     });
 
-    // Selección de plan
+    // Selección de plan — lleva al checkout real de Hotmart
+    const CHECKOUT_LINKS = {
+      simples: 'https://pay.hotmart.com/B107153717L?off=7v82aezm',
+      completo: 'https://pay.hotmart.com/B107153717L?off=pjakdpzi',
+    };
+
     root.querySelectorAll('.plan-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        console.log('Plan seleccionado:', btn.dataset.plan, '— avanzar al checkout');
+        const url = CHECKOUT_LINKS[btn.dataset.plan];
+        if (url) window.location.href = url;
       });
     });
 
     root.getElementById('ctaBtn').addEventListener('click', () => {
-      console.log('Avanzar al checkout — Plan Completo');
+      window.location.href = CHECKOUT_LINKS.completo;
     });
   
 </script>
