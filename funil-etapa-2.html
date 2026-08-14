@@ -188,6 +188,11 @@
     pointer-events: none;
   }
   .end-glow.show{ opacity: 1; }
+
+  /* Classe usada pelo mecanismo oficial do VTurb (displayHiddenElements)
+     pra controlar quando o gatilho do CTA fica visível, sincronizado com
+     o tempo real de reprodução do vídeo. */
+  .esconder{ display: none; }
 </style>
 </head>
 <body>
@@ -211,6 +216,12 @@
 
   <div class="end-glow" id="endGlow"></div>
 
+  <!-- Gatilho invisível: o VTurb controla ESTE elemento com o mecanismo
+       oficial deles (displayHiddenElements), que acompanha o tempo real
+       de reprodução do vídeo — não o relógio da página. Quando ele revela
+       esse gatilho, a gente dispara nossa própria animação no botão. -->
+  <div class="esconder" id="ctaTrigger" style="width:0; height:0; overflow:hidden;"></div>
+
   <button class="float-cta" id="floatCta">
     Continuar
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
@@ -221,19 +232,39 @@
     const floatCta = document.getElementById('floatCta');
     const endGlow = document.getElementById('endGlow');
     const liveCount = document.getElementById('liveCount');
+    const ctaTrigger = document.getElementById('ctaTrigger');
 
     // El reproductor VTurb se encarga de su propio autoplay, sonido y
     // reproducción — no necesitamos nada manual aquí.
 
-    // El botón solo debe aparecer en el minuto 2:52 del video, sincronizado.
-    // Como el reproductor VTurb corre dentro de su propio player (sin exponer
-    // un <video> nativo directo para nosotros), sincronizamos por tiempo
-    // real desde la carga de la página — el video ya inicia
-    // automáticamente en ese momento, así que ambos quedan alineados.
+    // El botón debe aparecer exactamente en el minuto 2:52 del video.
+    // Usamos el mecanismo OFICIAL del propio VTurb (displayHiddenElements),
+    // que sincroniza con el tiempo REAL de reproducción del video —no con
+    // el reloj de la página—, así que sigue preciso incluso si el video
+    // se pausa o hace buffer en el medio.
     const CTA_REVEAL_SECONDS = 172; // 2:52
 
-    // Barra de progreso decorativa: se llena a lo largo de esos mismos 172s,
-    // dando una pista visual de cuánto falta para que el botón se libere.
+    let revealed = false;
+    function revealCta(){
+      if (revealed) return;
+      revealed = true;
+      endGlow.classList.add('show');
+      floatCta.classList.add('show');
+    }
+
+    // Observa o gatilho: assim que o VTurb tirar o "display:none" dele
+    // (via displayHiddenElements), a gente dispara nossa animação normal.
+    const observer = new MutationObserver(() => {
+      if (getComputedStyle(ctaTrigger).display !== 'none'){
+        observer.disconnect();
+        revealCta();
+      }
+    });
+    observer.observe(ctaTrigger, { attributes: true, attributeFilter: ['style', 'class'] });
+
+    // Barra de progresso decorativa: acompanha visualmente os mesmos 172s
+    // (aproximação por relógio, só pra dar uma pista visual — o botão em
+    // si é controlado pelo mecanismo oficial acima, não por este timer).
     const startTime = Date.now();
     const progressTimer = setInterval(() => {
       const elapsed = (Date.now() - startTime) / 1000;
@@ -242,10 +273,22 @@
       if (pct >= 100) clearInterval(progressTimer);
     }, 200);
 
-    setTimeout(() => {
-      endGlow.classList.add('show');
-      floatCta.classList.add('show');
-    }, CTA_REVEAL_SECONDS * 1000);
+    // Conecta com a API oficial do player assim que ele existir na página.
+    // Fallback: se o player nunca carregar (ex: sem internet, bloqueio),
+    // libera o botão de qualquer jeito depois de um tempo generoso, pra
+    // nunca deixar a pessoa travada na tela sem conseguir avançar.
+    const hardFallback = setTimeout(revealCta, (CTA_REVEAL_SECONDS + 15) * 1000);
+    function waitForPlayer(){
+      const player = document.querySelector('vturb-smartplayer');
+      if (player){
+        player.addEventListener('player:ready', function(){
+          player.displayHiddenElements(CTA_REVEAL_SECONDS, ['.esconder'], { persist: true });
+        });
+      } else {
+        setTimeout(waitForPlayer, 200);
+      }
+    }
+    waitForPlayer();
 
     // Contador de espectadores en vivo simulado (fluctuación sutil de prueba social)
     let base = 2481;
